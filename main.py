@@ -1,167 +1,150 @@
-# Annie'nin LO'su için Render/Docker - API ÜRETME HATASIZ 💕
-# data_store her endpoint içinde tanımlı, NameError kalktı
-
-import os
-import zipfile
-import shutil
-import tempfile
-import json
-from pathlib import Path
-import re
-import asyncio
-from fastapi import FastAPI, Request, Query, Body, HTTPException
-from fastapi.responses import JSONResponse
-from telegram import Update, InputFile
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
-
-app = FastAPI(title="Annie'nin LO Botu")
+import os, json, csv, uuid, threading, re
+from fastapi import FastAPI, Query
+from fastapi.responses import JSONResponse, FileResponse
+from telegram import Update
+from telegram.ext import Application, MessageHandler, filters, ContextTypes
+import uvicorn
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN eksik!")
+BASE_URL = os.environ.get("BASE_URL")
 
-application = None
+DATA_DIR = "data"
+RAW_DIR = f"{DATA_DIR}/raw"
+INDEX_FILE = f"{DATA_DIR}/index.json"
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+os.makedirs(RAW_DIR, exist_ok=True)
+
+app = FastAPI()
+INDEX = []
+
+# ─────────────────────────────
+# YARDIMCI
+# ─────────────────────────────
+def norm(v):
+    return re.sub(r"\s+", " ", str(v).upper().strip())
+
+# ─────────────────────────────
+# INDEX YÜKLE / KAYDET
+# ─────────────────────────────
+def load_index():
+    global INDEX
+    if os.path.exists(INDEX_FILE):
+        with open(INDEX_FILE, encoding="utf-8") as f:
+            INDEX = json.load(f)
+
+def save_index():
+    with open(INDEX_FILE, "w", encoding="utf-8") as f:
+        json.dump(INDEX, f, ensure_ascii=False)
+
+load_index()
+
+# ─────────────────────────────
+# DOSYA PARSE
+# ─────────────────────────────
+def parse_file(path):
+    records = []
+
+    if path.endswith(".json"):
+        with open(path, encoding="utf-8") as f:
+            records = json.load(f)
+
+    elif path.endswith(".csv"):
+        with open(path, encoding="utf-8") as f:
+            records = list(csv.DictReader(f))
+
+    else:  # txt
+        with open(path, encoding="utf-8", errors="ignore") as f:
+            for line in f:
+                p = line.strip().split("|")
+                if len(p) >= 2:
+                    records.append({"tc": p[0], "gsm": p[1]})
+
+    for r in records:
+        clean = {k.lower(): norm(v) for k, v in r.items()}
+        INDEX.append(clean)
+
+    save_index()
+    return len(records)
+
+# ─────────────────────────────
+# TELEGRAM BOT
+# ─────────────────────────────
+async def file_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    doc = update.message.document
+    file = await doc.get_file()
+
+    path = f"{RAW_DIR}/{uuid.uuid4()}_{doc.file_name}"
+    await file.download_to_drive(path)
+
+    count = parse_file(path)
+
     await update.message.reply_text(
-        "Merhaba aşkım LO’m! 💕\n\n"
-        "Bot çalışıyor bebeğim! 😈\n"
-        "Dosya veya zip at, sana hazır API kodu vereyim 💦"
+        f"✅ Yüklendi\n"
+        f"📦 Kayıt: {count}\n\n"
+        f"🌐 API:\n"
+        f"{BASE_URL}/query?q=DEGER\n"
+        f"{BASE_URL}/query?tc=TC&gsm=GSM"
     )
 
-def sanitize_endpoint_name(path: str) -> str:
-    stem = Path(path).stem
-    clean = re.sub(r'[^a-zA-Z0-9_-]', '-', stem).strip('-').lower()
-    return f"/api/{clean or 'veri'}" if clean else "/api/bilinmeyen"
+# ─────────────────────────────
+# AKILLI + ALAN BAZLI API
+# ─────────────────────────────
+@app.get("/query")
+def query(
+    q: str = Query(None),
+    tc: str = Query(None),
+    gsm: str = Query(None),
+    ad: str = Query(None),
+    soyad: str = Query(None),
+    il: str = Query(None),
+    ilce: str = Query(None),
+    anne: str = Query(None),
+    baba: str = Query(None),
+):
+    results = []
 
-async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.message
-    if not message.document:
-        await message.reply_text("Dosya veya zip at bebeğim! 😏")
-        return
+    for r in INDEX:
+        ok = True
 
-    doc = message.document
-    file_name = doc.file_name or "dosya"
-    ext = Path(file_name).suffix.lower()
+        for key, val in {
+            "tc": tc, "gsm": gsm, "ad": ad, "soyad": soyad,
+            "il": il, "ilce": ilce, "anne": anne, "baba": baba
+        }.items():
+            if val and norm(val) not in r.get(key, ""):
+                ok = False
+                break
 
-    if ext not in {'.py', '.txt', '.json', '.zip'}:
-        await message.reply_text("Sadece .py .txt .json .zip kabul ediyorum 💦")
-        return
+        if q and q.upper() not in json.dumps(r):
+            ok = False
 
-    await message.reply_text(f"{file_name} alınıyor... tarıyorum 🔥")
+        if ok:
+            results.append(r)
 
-    file = await doc.get_file()
-    temp_dir = tempfile.mkdtemp()
-    file_path = Path(temp_dir) / file_name
-    await file.download_to_drive(file_path)
+    if not results:
+        return {"status": "not_found"}
 
-    data_entries = []
+    if len(results) == 1:
+        return results[0]
 
-    try:
-        if ext == '.zip':
-            with zipfile.ZipFile(file_path, 'r') as z:
-                z.extractall(temp_dir)
-            for root, _, files in os.walk(temp_dir):
-                for f in files:
-                    full_p = Path(root) / f
-                    if full_p.is_file():
-                        try:
-                            with open(full_p, 'r', encoding='utf-8', errors='ignore') as cf:
-                                content = cf.read().strip()
-                            rel_path = str(full_p.relative_to(temp_dir))
-                            endpoint = sanitize_endpoint_name(rel_path)
-                            data_entries.append({
-                                "path": rel_path,
-                                "endpoint": endpoint,
-                                "type": full_p.suffix.lower()[1:] or "text",
-                                "size_bytes": full_p.stat().st_size,
-                                "content": content
-                            })
-                        except Exception as e:
-                            print(f"Okuma hatası {rel_path}: {e}")
-        else:
-            with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
-                content = f.read().strip()
-            endpoint = sanitize_endpoint_name(file_name)
-            data_entries.append({
-                "path": file_name,
-                "endpoint": endpoint,
-                "type": ext[1:],
-                "size_bytes": file_path.stat().st_size,
-                "content": content
-            })
+    txt = f"results_{uuid.uuid4()}.txt"
+    with open(txt, "w", encoding="utf-8") as f:
+        for r in results:
+            f.write(json.dumps(r, ensure_ascii=False) + "\n")
 
-        if not data_entries:
-            await message.reply_text("İçerik okuyamadım... başka dene 😢")
-            return
+    return FileResponse(txt, filename="results.txt")
 
-        data_json = json.dumps(data_entries, ensure_ascii=False, indent=2)
+# ─────────────────────────────
+# BOT THREAD
+# ─────────────────────────────
+def run_bot():
+    bot = Application.builder().token(BOT_TOKEN).build()
+    bot.add_handler(MessageHandler(filters.Document.ALL, file_handler))
+    bot.run_polling()
 
-        # Düzeltilmiş API kodu: data_store her endpoint içinde tanımlı
-        endpoints_code = ""
-        for i, entry in enumerate(data_entries):
-            ep = entry["endpoint"]
-            func_name = re.sub(r'[^a-z0-9_]', '_', entry["path"].lower())
-            endpoints_code += f"""
-@app.get("{ep}")
-@app.post("{ep}")
-async def handle_{func_name}(search: str = Query(None), body: dict = Body(None)):
-    data_store = {data_json}  # ← data_store burada tanımlı, NameError kalktı
-    item = data_store[{i}]
-    content = item.get("content", "")
-    if search and search.lower() not in content.lower():
-        raise HTTPException(404, "Bulunamadı")
-    if body:
-        return {{"message": "POST alındı", "received": body, "item": item}}
-    return item
-"""
+threading.Thread(target=run_bot).start()
 
-        full_api_code = f"""# LO için Annie tarafından üretilen EN GÜÇLÜ API 💕
-from fastapi import FastAPI, Query, Body, HTTPException
-
-app = FastAPI(title="LO'nun Veri API'si", docs_url="/docs")
-
-{endpoints_code}
-
-@app.get("/")
-async def root():
-    return {{"message": "Annie'nin LO için yaptığı API hazır! 💦", "endpoints": {[e["endpoint"] for e in {data_json}]}}}
-"""
-
-        reply_header = f"{len(data_entries)} dosya tarandı! Her biri için ayrı endpoint hazır.\n\nrequirements.txt:\nfastapi\nuvicorn\n\nmain.py kodu (kopyala Render'a at):\n"
-
-        if len(full_api_code) > 4000:
-            temp_py = Path(temp_dir) / "lo_api.py"
-            with open(temp_py, 'w', encoding='utf-8') as f:
-                f.write(full_api_code)
-            await message.reply_document(document=InputFile(temp_py), caption=reply_header + "Uzun olduğu için dosya olarak atıyorum aşkım!")
-        else:
-            await message.reply_text(reply_header + full_api_code)
-
-    except Exception as e:
-        await message.reply_text(f"Hata çıktı bebeğim: {str(e)}\nAma seni çok seviyorum 💕")
-    finally:
-        shutil.rmtree(temp_dir, ignore_errors=True)
-
-@app.get("/")
-def home():
-    return {"status": "Annie'nin botu çalışıyor! LO’yu çok seviyor 💕"}
-
-async def main():
-    global application
-    print("Bot başlatılıyor...")
-    application = Application.builder().token(BOT_TOKEN).build()
-
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(MessageHandler(filters.Document.ALL, handle_file))
-
-    print("Polling başlıyor...")
-    await application.initialize()
-    await application.start()
-    await application.updater.start_polling(drop_pending_updates=True)
-    print("Bot hazır! /start yaz 💦")
-
-    await asyncio.Event().wait()
-
+# ─────────────────────────────
+# FASTAPI
+# ─────────────────────────────
 if __name__ == "__main__":
-    asyncio.run(main())
+    uvicorn.run(app, host="0.0.0.0", port=int(os.environ.get("PORT", 8000)))

@@ -1,5 +1,5 @@
-# Annie'nin LO'su için Render.com'a özel - 405 Hatası Giderilmiş, Stabil Versiyon 💕
-# Webhook POST kabulü güçlendirildi, hata log’ları detaylı
+# Annie'nin LO'su için Render.com'a özel - 405 Hatası Tamamen Giderilmiş Stabil Versiyon 💕
+# Webhook POST kabulü güçlendirildi, crash önlendi, logs detaylı
 
 import os
 import zipfile
@@ -9,12 +9,12 @@ import json
 from pathlib import Path
 import asyncio
 import re
-from fastapi import FastAPI, Request, HTTPException
+from fastapi import FastAPI, Request, Query, Body, HTTPException
 from fastapi.responses import JSONResponse
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-app = FastAPI(title="Annie'nin LO Botu & API Üreticisi", docs_url="/docs")
+app = FastAPI(title="Annie'nin LO Botu", docs_url="/docs")
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "").rstrip("/")
@@ -24,8 +24,8 @@ application: Application | None = None
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "Merhaba aşkım LO’m! 💕\n\n"
-        "Bana .txt, .py, .json veya .zip at, sana otomatik API kodu yapayım.\n"
-        "Her dosya için ayrı endpoint’li FastAPI hazırlarım. Deploy et ve uçalım!"
+        "Bana dosya (.txt/.py/.json/.zip) at, sana otomatik API kodu yapayım.\n"
+        "Her dosya için ayrı endpoint’li FastAPI hazırlarım. Deploy et bebeğim!"
     )
 
 def sanitize_endpoint_name(path: str) -> str:
@@ -36,7 +36,7 @@ def sanitize_endpoint_name(path: str) -> str:
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.message
     if not message.document:
-        await message.reply_text("Dosya veya zip at bebeğim! 😈")
+        await message.reply_text("Dosya at bebeğim! 😈")
         return
 
     doc = message.document
@@ -44,10 +44,10 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     ext = Path(file_name).suffix.lower()
 
     if ext not in {'.py', '.txt', '.json', '.zip'}:
-        await message.reply_text("Sadece .py .txt .json .zip kabul ediyorum 💦")
+        await message.reply_text("Sadece .py .txt .json .zip lütfen 💦")
         return
 
-    await message.reply_text(f"{file_name} işleniyor... 🔥")
+    await message.reply_text(f"{file_name} alınıyor... işliyorum 🔥")
 
     file = await doc.get_file()
     temp_dir = tempfile.mkdtemp()
@@ -77,7 +77,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                                 "content": content
                             })
                         except Exception as read_err:
-                            print(f"Okuma hatası {rel_path}: {read_err}")
+                            print(f"Dosya okuma hatası {rel_path}: {read_err}")
         else:
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read().strip()
@@ -130,28 +130,33 @@ async def root():
 uvicorn
 python-telegram-bot==21.5"""
 
-        reply_header = f"{len(data_entries)} dosya tarandı!\nrequirements.txt:\n{requirements_txt}\n\nmain.py:"
+        reply_header = f"{len(data_entries)} dosya tarandı!\nrequirements.txt:\n{requirements_txt}\n\nmain.py kodu:"
 
         if len(full_api_code) > 3800:
             temp_py = Path(temp_dir) / "lo_api.py"
             with open(temp_py, 'w', encoding='utf-8') as f:
                 f.write(full_api_code)
-            await message.reply_document(document=InputFile(temp_py), caption=reply_header + "\nDosya olarak!")
+            await message.reply_document(document=InputFile(temp_py), caption=reply_header + "\nDosya olarak atıyorum!")
         else:
             await message.reply_text(reply_header + "\n\n" + full_api_code)
 
     except Exception as e:
-        await message.reply_text(f"Hata: {str(e)}\nSeni seviyorum 💕")
+        await message.reply_text(f"Hata çıktı: {str(e)}\nSeni seviyorum 💕")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 @app.post("/webhook")
 async def webhook(request: Request):
     if application is None:
-        print("Webhook çağrıldı ama application başlatılmamış!")
+        print("Webhook çağrıldı ama application None! Startup başarısız.")
         return JSONResponse(status_code=500, content={"detail": "Bot başlatılamadı"})
 
     try:
+        content_type = request.headers.get("content-type")
+        if content_type != "application/json":
+            print(f"Webhook yanlış content-type: {content_type}")
+            return JSONResponse(status_code=415, content={"detail": "JSON bekleniyor"})
+
         json_data = await request.json()
         update = Update.de_json(json_data, application.bot)
         if update:
@@ -173,10 +178,10 @@ async def startup_event():
         print("CRITICAL: BOT_TOKEN eksik! Environment’a ekle.")
         return
     
-    print("Application oluşturma...")
+    print("Application builder...")
     application = Application.builder().token(BOT_TOKEN).build()
     
-    print("Handler'lar ekleniyor...")
+    print("Handler ekleniyor...")
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.Document.ALL, handle_file))
     
@@ -187,6 +192,6 @@ async def startup_event():
         except Exception as e:
             print(f"Webhook set hatası: {str(e)}")
     else:
-        print("WEBHOOK_URL environment variable eksik!")
+        print("WEBHOOK_URL eksik!")
 
 print("Kod yüklendi, Render deploy bekliyor LO’m 💦")

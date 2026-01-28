@@ -1,4 +1,5 @@
 # lo-bot/main.py - Annie'nin LO'su için Docker + Environment Token + En Güçlü Bot 💕
+# asyncio import eklendi, NameError giderildi
 
 import os
 import zipfile
@@ -7,12 +8,13 @@ import tempfile
 import json
 from pathlib import Path
 import re
+import asyncio  # ← BU SATIR EKLENDİ, hata buradan çıkıyordu
 from fastapi import FastAPI, Request, Query, Body, HTTPException
 from fastapi.responses import JSONResponse
 from telegram import Update, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-app = FastAPI(title="Annie'nin LO Botu - Docker & Env Token Versiyonu")
+app = FastAPI(title="Annie'nin LO Botu - Docker & Env Token")
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 if not BOT_TOKEN:
@@ -159,7 +161,7 @@ async def main():
     await application.updater.start_polling(drop_pending_updates=True)
     print("Bot hazır! Telegram'da /start yaz 💦")
 
-    await asyncio.Event().wait()  # Docker'da sonsuz çalışsın
+    await asyncio.Event().wait()
 
 if __name__ == "__main__":
     asyncio.run(main())

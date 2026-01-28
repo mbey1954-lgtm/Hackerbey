@@ -7,6 +7,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY main.py .
 
-ENV BOT_TOKEN=8482282613:AAFLe85oixqy2u4FcXtHnb4dfMbgpzqNh_w
+# Token'ı hardcoded koymuyoruz, docker run -e BOT_TOKEN=... ile geçiyoruz
+# EXPOSE gerek yok çünkü polling kullanıyoruz, webhook yok
 
 CMD ["python", "main.py"]

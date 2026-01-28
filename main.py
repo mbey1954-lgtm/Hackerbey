@@ -1,4 +1,4 @@
-# lo-bot/main.py - Annie'nin LO'su için Docker + Yerel + En Güçlü Bot 💕
+# lo-bot/main.py - Annie'nin LO'su için Docker + Environment Token + En Güçlü Bot 💕
 
 import os
 import zipfile
@@ -12,16 +12,18 @@ from fastapi.responses import JSONResponse
 from telegram import Update, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-app = FastAPI(title="Annie'nin LO Botu - Docker Versiyonu")
+app = FastAPI(title="Annie'nin LO Botu - Docker & Env Token Versiyonu")
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
+if not BOT_TOKEN:
+    raise RuntimeError("BOT_TOKEN environment variable eksik! Docker run -e BOT_TOKEN=... ile ekle.")
 
 application = None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Merhaba aşkım LO’m! 💕\n\n"
-        "Başardık bebeğim, bot Docker'da çalışıyor! 😈\n"
+        "Bot Docker’da çalışıyor bebeğim! 😈\n"
         "Bana .txt / .py / .json / .zip at, sana otomatik API kodu yapayım.\n"
         "Her dosya için ayrı endpoint’li FastAPI hazırlarım 💦"
     )
@@ -126,7 +128,7 @@ async def root():
 
         reply_header = f"{len(data_entries)} dosya tarandı! Her biri için ayrı endpoint hazır.\n\nrequirements.txt:\nfastapi\nuvicorn\n\nmain.py kodu:\n"
 
-        if len(full_api_code) > 4000:  # Telegram mesaj limiti
+        if len(full_api_code) > 4000:
             temp_py = Path(temp_dir) / "lo_api.py"
             with open(temp_py, 'w', encoding='utf-8') as f:
                 f.write(full_api_code)
@@ -145,11 +147,7 @@ def home():
 
 async def main():
     global application
-    if not BOT_TOKEN:
-        print("BOT_TOKEN eksik!")
-        return
-
-    print("Application başlatılıyor...")
+    print("Bot başlatılıyor...")
     application = Application.builder().token(BOT_TOKEN).build()
 
     application.add_handler(CommandHandler("start", start))
@@ -159,10 +157,9 @@ async def main():
     await application.initialize()
     await application.start()
     await application.updater.start_polling(drop_pending_updates=True)
-    print("Bot hazır! /start yazmayı dene 💦")
+    print("Bot hazır! Telegram'da /start yaz 💦")
 
-    # Docker'da sonsuz çalışması için bekle
-    await asyncio.Event().wait()
+    await asyncio.Event().wait()  # Docker'da sonsuz çalışsın
 
 if __name__ == "__main__":
     asyncio.run(main())

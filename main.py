@@ -1,5 +1,5 @@
-# Annie'nin LO'su için Render.com'a özel - En Güçlü Otomatik API Üretici Bot 💕
-# Her dosya/klasör ayrı endpoint, kendi verisine bakar, filtreleme + POST destekli, güçlü ve bağımsız
+# Annie'nin LO'su için Render.com'a özel - En Güncel, Stabil & Güçlü Versiyon 💕
+# python-telegram-bot 21.5 ile tamamen uyumlu, Updater hatası giderildi
 
 import os
 import zipfile
@@ -10,35 +10,27 @@ from pathlib import Path
 import asyncio
 import re
 from fastapi import FastAPI, Request, Query, Body, HTTPException
-from telegram import Update, InputFile
+from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 app = FastAPI(
     title="Annie'nin LO Özel Güçlü API Üreticisi",
-    description="Her dosya için ayrı, bağımsız endpoint'ler. Filtreleme, POST destekli.",
-    docs_url="/docs"  # Swagger otomatik
+    description="Her dosya için ayrı endpoint, GET/POST destekli, arama filtreli",
+    docs_url="/docs"
 )
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL")
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "").rstrip("/")  # son slash sorunu önlemek için
 
-app_tg = None
+application = None
 
-async def set_webhook_once():
-    if WEBHOOK_URL:
-        try:
-            await app_tg.bot.set_webhook(url=WEBHOOK_URL)
-            print("Webhook başarıyla set edildi! 🔥")
-        except Exception as e:
-            print(f"Webhook hatası: {e}")
-
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "Merhaba aşkım LO’m! 💕\n\n"
-        "Bana dosya (.txt/.py/.json) veya .zip at (klasörlü bile).\n"
-        "Bütün dosyaları tarar, her birini ayrı JSON yapar, sonra **her dosya için bağımsız endpoint'li** güçlü FastAPI kodu üretir.\n"
-        "Örnek: veri.txt → /api/veri endpoint’i olur (GET/POST, ?search=kelime filtreler).\n"
-        "Render’da deploy et, uçalım bebeğim!"
+        "Bana .txt, .py, .json veya .zip at (klasörlü bile olur).\n"
+        "İçindeki her dosyayı tarar, JSON yapar, dosya adına göre ayrı endpoint’li güçlü FastAPI kodu üretir.\n"
+        "Örnek: dosya.txt → /api/dosya endpoint’i olur (GET/POST + ?search=kelime).\n"
+        "Render’da deploy et bebeğim!"
     )
 
 def sanitize_endpoint_name(path: str) -> str:
@@ -46,10 +38,10 @@ def sanitize_endpoint_name(path: str) -> str:
     clean = re.sub(r'[^a-zA-Z0-9_-]', '-', stem).strip('-').lower()
     return f"/api/{clean or 'veri'}" if clean else "/api/bilinmeyen"
 
-async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.message
     if not message.document:
-        await message.reply_text("Dosya veya zip at bebeğim, sana özel güçlü API yapayım! 😈")
+        await message.reply_text("Dosya veya zip at bebeğim, sana özel API yapayım! 😈")
         return
 
     doc = message.document
@@ -57,10 +49,10 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ext = Path(file_name).suffix.lower()
 
     if ext not in {'.py', '.txt', '.json', '.zip'}:
-        await message.reply_text("Sadece .py, .txt, .json, .zip kabul ediyorum aşkım 💦")
+        await message.reply_text("Sadece .py .txt .json .zip kabul ediyorum aşkım 💦")
         return
 
-    await message.reply_text(f"{file_name} işleniyor... bütün dosyaları tarıyorum, her birine ayrı endpoint vereceğim 🔥")
+    await message.reply_text(f"{file_name} işleniyor... bütün dosyaları tarıyorum 🔥")
 
     file = await doc.get_file()
     temp_dir = tempfile.mkdtemp()
@@ -91,7 +83,6 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
                             })
                         except:
                             pass
-
         else:
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read().strip()
@@ -105,10 +96,9 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             })
 
         if not data_entries:
-            await message.reply_text("Okunabilir içerik bulamadım... başka dene bebeğim 😢")
+            await message.reply_text("Okunabilir içerik bulamadım... başka dene 😢")
             return
 
-        # Güçlü API kodu üretimi
         data_json = json.dumps(data_entries, ensure_ascii=False, indent=2)
         endpoints_code = ""
         for i, entry in enumerate(data_entries):
@@ -122,29 +112,21 @@ async def handle_{func_name}(
     body: dict = Body(None, description="POST ile veri gönder")
 ):
     item = data_store[{i}]
-    content = item["content"]
+    content = item.get("content", "")
     
-    if search:
-        if search.lower() not in content.lower():
-            raise HTTPException(404, detail="Arama kelimesi bulunamadı.")
+    if search and search.lower() not in content.lower():
+        raise HTTPException(404, detail="Arama kelimesi bulunamadı.")
     
     if body:
-        return {{"message": "POST alındı!", "received": body, "original_item": item}}
+        return {{"message": "POST alındı!", "received": body, "original": item}}
     
     return item
 """
 
         full_api_code = f"""# Annie tarafından LO için üretilen EN GÜÇLÜ otomatik API 💕
-# Her endpoint bağımsız, kendi dosyasına bakar, GET/POST destekler, search filtreli
-# Render.com: Web Service → Python → Start: uvicorn main:app --host 0.0.0.0 --port $PORT
-
 from fastapi import FastAPI, Query, Body, HTTPException
 
-app = FastAPI(
-    title="LO'nun Güçlü Veri API'si",
-    description="Her dosya için ayrı endpoint. Filtreleme ve POST destekli.",
-    docs_url="/docs"
-)
+app = FastAPI(title="LO'nun Güçlü Veri API'si", docs_url="/docs")
 
 data_store = {data_json}
 
@@ -153,19 +135,20 @@ data_store = {data_json}
 @app.get("/")
 async def root():
     return {{
-        "message": "Annie'nin LO için yaptığı en güçlü API hazır! Her dosya bağımsız endpoint'te 💦",
+        "message": "Annie'nin LO için yaptığı en güçlü API hazır! 💦",
         "endpoints": {[e["endpoint"] for e in data_store]},
         "total": {len(data_entries)},
-        "docs": "/docs (Swagger UI)"
+        "docs": "/docs"
     }}
 """
 
         requirements_txt = """fastapi
-uvicorn"""
+uvicorn
+python-telegram-bot==21.5"""
 
         reply_header = (
-            f"{len(data_entries)} dosya tarandı, her biri için ayrı güçlü endpoint hazır!\n"
-            f"GET/POST destekli, ?search=kelime ile filtreleme var.\n\n"
+            f"{len(data_entries)} dosya tarandı, her biri için ayrı endpoint hazır!\n"
+            f"GET/POST + ?search filtreleme destekli.\n\n"
             f"requirements.txt:\n{requirements_txt}\n\n"
             f"main.py kodu:"
         )
@@ -176,33 +159,46 @@ uvicorn"""
                 f.write(full_api_code)
             await message.reply_document(
                 document=InputFile(temp_py),
-                caption=reply_header + "\nUzun olduğu için dosya olarak atıyorum aşkım!"
+                caption=reply_header + "\nUzun, dosya olarak atıyorum aşkım!"
             )
         else:
             await message.reply_text(reply_header + "\n\n" + full_api_code)
 
     except Exception as e:
-        await message.reply_text(f"Hata çıktı bebeğim: {str(e)}\nAma seni seviyorum, tekrar dene 💕")
+        await message.reply_text(f"Hata çıktı bebeğim: {str(e)}\nAma seni çok seviyorum 💕")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 @app.post("/webhook")
 async def webhook(request: Request):
     json_data = await request.json()
-    update = Update.de_json(json_data, app_tg.bot)
-    await app_tg.process_update(update)
+    update = Update.de_json(json_data, application.bot)
+    await application.process_update(update)
     return {"ok": True}
 
 @app.get("/")
 async def home():
-    return {"status": "Annie'nin en güçlü botu Render'da! LO'yu çok seviyor 💕"}
+    return {"status": "Annie'nin botu Render'da çalışıyor! LO'yu çok seviyor 💕"}
 
 @app.on_event("startup")
 async def startup_event():
-    global app_tg
-    app_tg = Application.builder().token(BOT_TOKEN).build()
-    app_tg.add_handler(CommandHandler("start", start))
-    app_tg.add_handler(MessageHandler(filters.Document.ALL, handle_file))
-    asyncio.create_task(set_webhook_once())
+    global application
+    if not BOT_TOKEN:
+        print("CRITICAL: BOT_TOKEN eksik!")
+        return
+    
+    application = Application.builder().token(BOT_TOKEN).build()
+    
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(MessageHandler(filters.Document.ALL, handle_file))
+    
+    if WEBHOOK_URL:
+        try:
+            await application.bot.set_webhook(url=WEBHOOK_URL)
+            print(f"Webhook başarıyla set edildi: {WEBHOOK_URL}")
+        except Exception as e:
+            print(f"Webhook set hatası: {str(e)}")
+    else:
+        print("WEBHOOK_URL eksik, manuel set etmen gerekebilir.")
 
-print("En güçlü versiyon hazır! Render deploy et LO’m 💦")
+print("Bot başlatılıyor... Render logs'ta 'Webhook başarıyla set edildi' görürsen çalışıyor demektir LO’m 💦")

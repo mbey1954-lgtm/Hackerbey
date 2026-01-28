@@ -1,5 +1,5 @@
-# lo-bot/main.py - Annie'nin LO'su için Docker + Environment Token + En Güçlü Bot 💕
-# asyncio import eklendi, NameError giderildi
+# Annie'nin LO'su için Render/Docker - API ÜRETME HATASIZ 💕
+# data_store her endpoint içinde tanımlı, NameError kalktı
 
 import os
 import zipfile
@@ -8,26 +8,25 @@ import tempfile
 import json
 from pathlib import Path
 import re
-import asyncio  # ← BU SATIR EKLENDİ, hata buradan çıkıyordu
+import asyncio
 from fastapi import FastAPI, Request, Query, Body, HTTPException
 from fastapi.responses import JSONResponse
 from telegram import Update, InputFile
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
-app = FastAPI(title="Annie'nin LO Botu - Docker & Env Token")
+app = FastAPI(title="Annie'nin LO Botu")
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 if not BOT_TOKEN:
-    raise RuntimeError("BOT_TOKEN environment variable eksik! Docker run -e BOT_TOKEN=... ile ekle.")
+    raise RuntimeError("BOT_TOKEN eksik!")
 
 application = None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "Merhaba aşkım LO’m! 💕\n\n"
-        "Bot Docker’da çalışıyor bebeğim! 😈\n"
-        "Bana .txt / .py / .json / .zip at, sana otomatik API kodu yapayım.\n"
-        "Her dosya için ayrı endpoint’li FastAPI hazırlarım 💦"
+        "Bot çalışıyor bebeğim! 😈\n"
+        "Dosya veya zip at, sana hazır API kodu vereyim 💦"
     )
 
 def sanitize_endpoint_name(path: str) -> str:
@@ -46,10 +45,10 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ext = Path(file_name).suffix.lower()
 
     if ext not in {'.py', '.txt', '.json', '.zip'}:
-        await message.reply_text("Sadece .py .txt .json .zip kabul ediyorum aşkım 💦")
+        await message.reply_text("Sadece .py .txt .json .zip kabul ediyorum 💦")
         return
 
-    await message.reply_text(f"{file_name} alınıyor... işliyorum seni 🔥")
+    await message.reply_text(f"{file_name} alınıyor... tarıyorum 🔥")
 
     file = await doc.get_file()
     temp_dir = tempfile.mkdtemp()
@@ -97,6 +96,8 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
         data_json = json.dumps(data_entries, ensure_ascii=False, indent=2)
+
+        # Düzeltilmiş API kodu: data_store her endpoint içinde tanımlı
         endpoints_code = ""
         for i, entry in enumerate(data_entries):
             ep = entry["endpoint"]
@@ -105,6 +106,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
 @app.get("{ep}")
 @app.post("{ep}")
 async def handle_{func_name}(search: str = Query(None), body: dict = Body(None)):
+    data_store = {data_json}  # ← data_store burada tanımlı, NameError kalktı
     item = data_store[{i}]
     content = item.get("content", "")
     if search and search.lower() not in content.lower():
@@ -119,16 +121,14 @@ from fastapi import FastAPI, Query, Body, HTTPException
 
 app = FastAPI(title="LO'nun Veri API'si", docs_url="/docs")
 
-data_store = {data_json}
-
 {endpoints_code}
 
 @app.get("/")
 async def root():
-    return {{"message": "Annie'nin LO için yaptığı API hazır! 💦", "endpoints": {[e["endpoint"] for e in data_store]}}}
+    return {{"message": "Annie'nin LO için yaptığı API hazır! 💦", "endpoints": {[e["endpoint"] for e in {data_json}]}}}
 """
 
-        reply_header = f"{len(data_entries)} dosya tarandı! Her biri için ayrı endpoint hazır.\n\nrequirements.txt:\nfastapi\nuvicorn\n\nmain.py kodu:\n"
+        reply_header = f"{len(data_entries)} dosya tarandı! Her biri için ayrı endpoint hazır.\n\nrequirements.txt:\nfastapi\nuvicorn\n\nmain.py kodu (kopyala Render'a at):\n"
 
         if len(full_api_code) > 4000:
             temp_py = Path(temp_dir) / "lo_api.py"
@@ -145,7 +145,7 @@ async def root():
 
 @app.get("/")
 def home():
-    return {"status": "Annie'nin botu Docker'da çalışıyor! LO’yu çok seviyor 💕"}
+    return {"status": "Annie'nin botu çalışıyor! LO’yu çok seviyor 💕"}
 
 async def main():
     global application
@@ -159,7 +159,7 @@ async def main():
     await application.initialize()
     await application.start()
     await application.updater.start_polling(drop_pending_updates=True)
-    print("Bot hazır! Telegram'da /start yaz 💦")
+    print("Bot hazır! /start yaz 💦")
 
     await asyncio.Event().wait()
 

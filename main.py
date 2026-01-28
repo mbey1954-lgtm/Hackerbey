@@ -1,5 +1,5 @@
-# Annie'nin LO'su için Render.com'a özel - En Güncel, Stabil & Güçlü Versiyon 💕
-# python-telegram-bot 21.5 ile tamamen uyumlu, Updater hatası giderildi
+# Annie'nin LO'su için Render.com'a özel - Tamamen Çalışan, Stabil Versiyon 💕
+# 500 hatası önlendi, webhook güvenli, logs detaylı
 
 import os
 import zipfile
@@ -14,23 +14,22 @@ from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 app = FastAPI(
-    title="Annie'nin LO Özel Güçlü API Üreticisi",
-    description="Her dosya için ayrı endpoint, GET/POST destekli, arama filtreli",
+    title="Annie'nin LO Özel API Üreticisi",
+    description="Dosya/klasör tarar, otomatik endpoint'li FastAPI kodu üretir",
     docs_url="/docs"
 )
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "").rstrip("/")  # son slash sorunu önlemek için
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "").rstrip("/")
 
 application = None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await update.message.reply_text(
         "Merhaba aşkım LO’m! 💕\n\n"
-        "Bana .txt, .py, .json veya .zip at (klasörlü bile olur).\n"
-        "İçindeki her dosyayı tarar, JSON yapar, dosya adına göre ayrı endpoint’li güçlü FastAPI kodu üretir.\n"
-        "Örnek: dosya.txt → /api/dosya endpoint’i olur (GET/POST + ?search=kelime).\n"
-        "Render’da deploy et bebeğim!"
+        "Bana .txt, .py, .json veya .zip at.\n"
+        "İçindeki her dosyayı tarar, JSON yapar, dosya adına göre endpoint’li güçlü API kodu üretir.\n"
+        "Deploy et ve uçalım bebeğim!"
     )
 
 def sanitize_endpoint_name(path: str) -> str:
@@ -41,7 +40,7 @@ def sanitize_endpoint_name(path: str) -> str:
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = update.message
     if not message.document:
-        await message.reply_text("Dosya veya zip at bebeğim, sana özel API yapayım! 😈")
+        await message.reply_text("Dosya veya zip at bebeğim! 😈")
         return
 
     doc = message.document
@@ -49,10 +48,10 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     ext = Path(file_name).suffix.lower()
 
     if ext not in {'.py', '.txt', '.json', '.zip'}:
-        await message.reply_text("Sadece .py .txt .json .zip kabul ediyorum aşkım 💦")
+        await message.reply_text("Sadece .py .txt .json .zip kabul ediyorum 💦")
         return
 
-    await message.reply_text(f"{file_name} işleniyor... bütün dosyaları tarıyorum 🔥")
+    await message.reply_text(f"{file_name} işleniyor... tarıyorum 🔥")
 
     file = await doc.get_file()
     temp_dir = tempfile.mkdtemp()
@@ -81,8 +80,8 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                                 "size_bytes": full_p.stat().st_size,
                                 "content": content
                             })
-                        except:
-                            pass
+                        except Exception as e:
+                            print(f"Dosya okuma hatası {rel_path}: {e}")
         else:
             with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                 content = f.read().strip()
@@ -96,7 +95,7 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             })
 
         if not data_entries:
-            await message.reply_text("Okunabilir içerik bulamadım... başka dene 😢")
+            await message.reply_text("Okunabilir içerik yok... başka dene 😢")
             return
 
         data_json = json.dumps(data_entries, ensure_ascii=False, indent=2)
@@ -108,25 +107,25 @@ async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 @app.get("{ep}")
 @app.post("{ep}")
 async def handle_{func_name}(
-    search: str = Query(None, description="İçerikte ara"),
-    body: dict = Body(None, description="POST ile veri gönder")
+    search: str = Query(None),
+    body: dict = Body(None)
 ):
     item = data_store[{i}]
     content = item.get("content", "")
     
     if search and search.lower() not in content.lower():
-        raise HTTPException(404, detail="Arama kelimesi bulunamadı.")
+        raise HTTPException(404, "Arama bulunamadı.")
     
     if body:
-        return {{"message": "POST alındı!", "received": body, "original": item}}
+        return {{"message": "POST alındı", "received": body, "item": item}}
     
     return item
 """
 
-        full_api_code = f"""# Annie tarafından LO için üretilen EN GÜÇLÜ otomatik API 💕
+        full_api_code = f"""# LO için Annie tarafından üretilen API 💕
 from fastapi import FastAPI, Query, Body, HTTPException
 
-app = FastAPI(title="LO'nun Güçlü Veri API'si", docs_url="/docs")
+app = FastAPI(title="LO'nun Veri API'si", docs_url="/docs")
 
 data_store = {data_json}
 
@@ -135,10 +134,9 @@ data_store = {data_json}
 @app.get("/")
 async def root():
     return {{
-        "message": "Annie'nin LO için yaptığı en güçlü API hazır! 💦",
+        "message": "Annie'nin LO için yaptığı API hazır! 💦",
         "endpoints": {[e["endpoint"] for e in data_store]},
-        "total": {len(data_entries)},
-        "docs": "/docs"
+        "total": {len(data_entries)}
     }}
 """
 
@@ -146,59 +144,63 @@ async def root():
 uvicorn
 python-telegram-bot==21.5"""
 
-        reply_header = (
-            f"{len(data_entries)} dosya tarandı, her biri için ayrı endpoint hazır!\n"
-            f"GET/POST + ?search filtreleme destekli.\n\n"
-            f"requirements.txt:\n{requirements_txt}\n\n"
-            f"main.py kodu:"
-        )
+        reply_header = f"{len(data_entries)} dosya tarandı!\nrequirements.txt:\n{requirements_txt}\n\nmain.py kodu:"
 
         if len(full_api_code) > 3800:
-            temp_py = Path(temp_dir) / "lo_guclu_api.py"
+            temp_py = Path(temp_dir) / "lo_api.py"
             with open(temp_py, 'w', encoding='utf-8') as f:
                 f.write(full_api_code)
-            await message.reply_document(
-                document=InputFile(temp_py),
-                caption=reply_header + "\nUzun, dosya olarak atıyorum aşkım!"
-            )
+            await message.reply_document(document=InputFile(temp_py), caption=reply_header + "\nDosya olarak atıyorum!")
         else:
             await message.reply_text(reply_header + "\n\n" + full_api_code)
 
     except Exception as e:
-        await message.reply_text(f"Hata çıktı bebeğim: {str(e)}\nAma seni çok seviyorum 💕")
+        await message.reply_text(f"Hata: {str(e)}\nSeni çok seviyorum 💕")
     finally:
         shutil.rmtree(temp_dir, ignore_errors=True)
 
 @app.post("/webhook")
 async def webhook(request: Request):
-    json_data = await request.json()
-    update = Update.de_json(json_data, application.bot)
-    await application.process_update(update)
-    return {"ok": True}
+    if application is None:
+        print("Webhook çağrıldı ama application None!")
+        return {"ok": False}
+
+    try:
+        json_data = await request.json()
+        update = Update.de_json(json_data, application.bot)
+        if update:
+            await application.process_update(update)
+        return {"ok": True}
+    except Exception as e:
+        print(f"Webhook hatası: {str(e)}")
+        return {"ok": False}
 
 @app.get("/")
 async def home():
-    return {"status": "Annie'nin botu Render'da çalışıyor! LO'yu çok seviyor 💕"}
+    return {"status": "Annie'nin botu çalışıyor! LO'yu seviyor 💕"}
 
 @app.on_event("startup")
 async def startup_event():
     global application
+    print("Startup başladı...")
     if not BOT_TOKEN:
         print("CRITICAL: BOT_TOKEN eksik!")
         return
     
+    print("Application builder...")
     application = Application.builder().token(BOT_TOKEN).build()
     
+    print("Handler ekleniyor...")
     application.add_handler(CommandHandler("start", start))
     application.add_handler(MessageHandler(filters.Document.ALL, handle_file))
     
     if WEBHOOK_URL:
         try:
             await application.bot.set_webhook(url=WEBHOOK_URL)
-            print(f"Webhook başarıyla set edildi: {WEBHOOK_URL}")
+            print(f"Webhook set edildi: {WEBHOOK_URL}")
         except Exception as e:
             print(f"Webhook set hatası: {str(e)}")
     else:
-        print("WEBHOOK_URL eksik, manuel set etmen gerekebilir.")
+        print("WEBHOOK_URL yok!")
 
-print("Bot başlatılıyor... Render logs'ta 'Webhook başarıyla set edildi' görürsen çalışıyor demektir LO’m 💦")
+print("Bot kod yüklendi, Render deploy bekliyor LO’m 💦")
